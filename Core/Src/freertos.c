@@ -30,6 +30,7 @@
 #include "usart.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,7 +55,8 @@ typedef struct {
 #define CONTROL_MODE            CONTROL_MODE_RELAY  // 当前控制模式
 
 // PID温度控制相关宏定义
-#define TEMP_SET_POINT          25.0f   // 温度设定点 (摄氏度)
+#define TEMP_SET_POINT_1          25.0f   // 温度设定点 (摄氏度)
+#define TEMP_SET_POINT_2          30.0f   // 温度设定点 (摄氏度)
 #define CONTROL_CYCLE_MS        100     // 控制任务周期 (毫秒)
 #define ADC_CYCLE_MS            500     // ADC读取任务周期 (毫秒)
 
@@ -88,7 +90,7 @@ extern UART_HandleTypeDef huart1;
 
 // PID控制器实例
 PID_Controller temp_pid = {
-    .setpoint = TEMP_SET_POINT,
+    .setpoint = TEMP_SET_POINT_1,
     .kp = PID_KP,
     .ki = PID_KI, 
     .kd = PID_KD,
@@ -102,25 +104,32 @@ PID_Controller temp_pid = {
 static uint32_t pwm_period_start = 0;  // PWM周期开始时间
 static float current_duty_cycle = 0.0f; // 当前占空比 (%)
 static uint8_t pwm_output_state = 0;   // PWM输出状态
-/* USER CODE END Variables */
+
+// 系统模式控制变量
+static uint8_t system_mode = 1;        // 系统模式 (1=模式1, 2=模式2)
+static uint8_t system_started = 0;     // 系统启动标志
+/*任务句柄创建 */
 osThreadId defaultTaskHandle;
 osThreadId tempTaskHandle;
 osThreadId controlTaskHandle;
 osThreadId uartTaskHandle;
+osThreadId keyTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
-/* USER CODE BEGIN FunctionPrototypes */
+/* 任务函数 */
+void StartDefaultTask(void const * argument);
 void TemperatureTask(void const * argument);
 void ControlTask(void const * argument);
 void UartSendTemperatureTask(void const * argument);
+void KeyScanTask(void const * argument);
+
+/* 非任务函数声明位置*/
 float PID_Calculate(PID_Controller* pid, float current_value);
 void PID_Reset(PID_Controller* pid);
 void PWM_UpdateOutput(float duty_cycle);
 void Relay_UpdateOutput(float pid_output);
-/* USER CODE END FunctionPrototypes */
-void StartDefaultTask(void const * argument);
-
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
+
 
 /* GetIdleTaskMemory prototype (linked to static allocation support) */
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize );
@@ -181,6 +190,10 @@ void MX_FREERTOS_Init(void) {
   /* 创建串口发送温度任务 - 低优先级 */
   osThreadDef(uartTask, UartSendTemperatureTask, osPriorityLow, 0, 256);
   uartTaskHandle = osThreadCreate(osThread(uartTask), NULL);
+  
+  /* 创建按键扫描任务 - 普通优先级 */
+  osThreadDef(keyTask, KeyScanTask, osPriorityNormal, 0, 256);
+  keyTaskHandle = osThreadCreate(osThread(keyTask), NULL);
   /* USER CODE END RTOS_THREADS */
 
 }
@@ -280,6 +293,155 @@ void ControlTask(void const * argument)
     osDelay(CONTROL_CYCLE_MS);
   }
 }
+
+/**
+ * @brief 串口发送温度任务
+ * @param argument: 任务参数 (未使用)
+ * @retval None
+ */
+void UartSendTemperatureTask(void const * argument)
+{
+  /* USER CODE BEGIN UartSendTemperatureTask */
+  char message_buffer[128];     // 消息字符串缓冲区
+  int temp_int, temp_frac;      // 温度整数部分和小数部分
+  int setpoint_int, setpoint_frac; // 设定温度整数部分和小数部分
+  
+  // 等待系统初始化完成
+  osDelay(1000);
+  
+  // 发送启动消息
+  if (!system_started) {
+    system_started = 1;
+    
+    // 获取当前设定温度
+    float current_setpoint = temp_pid.setpoint;
+    setpoint_int = (int)current_setpoint;
+    setpoint_frac = (int)((current_setpoint - setpoint_int) * 10);
+    
+    // 获取当前检测温度
+    temp_int = (int)g_temperature;
+    temp_frac = (int)((g_temperature - temp_int) * 10);
+    
+    // 发送系统启动消息
+    snprintf(message_buffer, sizeof(message_buffer), 
+             "System Started!\r\nSet Temperature: %d.%d℃\r\nCurrent Temperature: %d.%d℃\r\nMode: %d\r\n\r\n", 
+             setpoint_int, setpoint_frac, temp_int, temp_frac, system_mode);
+    
+    HAL_UART_Transmit(&huart1, (uint8_t*)message_buffer, 
+                      strlen(message_buffer), HAL_MAX_DELAY);
+  }
+
+  /* Infinite loop */
+  for(;;)
+  {
+    // 将温度值分解为整数部分和小数部分
+    temp_int = (int)g_temperature;
+    temp_frac = (int)((g_temperature - temp_int) * 10);
+    
+    // 格式化温度字符串 "Temperature: xx.x℃"
+    snprintf(message_buffer, sizeof(message_buffer), 
+             "Temperature: %d.%d℃\r\n", temp_int, temp_frac);
+    
+    // 通过串口发送温度数据
+    HAL_UART_Transmit(&huart1, (uint8_t*)message_buffer, 
+                      strlen(message_buffer), HAL_MAX_DELAY);
+    
+    // 等待2秒
+    osDelay(2000);
+  }
+  /* USER CODE END UartSendTemperatureTask */
+}
+
+/* USER CODE END Application */
+
+
+/**
+ * @brief 按键扫描任务
+ * @param argument: 任务参数 (未使用)
+ * @retval None
+ */
+void KeyScanTask(void const * argument)
+{
+  /* USER CODE BEGIN KeyScanTask */
+  static uint8_t key_pressed = 0;       // 按键按下标志
+  static uint32_t key_count = 0;        // 按键按下计数
+  char message_buffer[128];             // 消息缓冲区
+  int setpoint_int, setpoint_frac;      // 设定温度整数部分和小数部分
+  
+  /* Infinite loop */
+  for(;;)
+  {
+    // 读取按键状态 (低电平有效，因为有上拉电阻)
+    if (HAL_GPIO_ReadPin(Key_GPIO_Port, Key_Pin) == GPIO_PIN_RESET)
+    {
+      if (!key_pressed)
+      {
+        key_count++;
+        if (key_count >= 3) // 消抖，30ms
+        {
+          key_pressed = 1;
+          
+          // 切换系统模式
+          if (system_mode == 1)
+          {
+            system_mode = 2;
+            temp_pid.setpoint = TEMP_SET_POINT_2;
+          }
+          else
+          {
+            system_mode = 1;
+            temp_pid.setpoint = TEMP_SET_POINT_1;
+          }
+          
+          // 智能PID控制器状态调整
+          float temp_diff = fabs(temp_pid.setpoint - (system_mode == 1 ? TEMP_SET_POINT_2 : TEMP_SET_POINT_1));
+          float current_error = fabs(g_temperature - temp_pid.setpoint);
+          
+          // 如果温度差异较大(>3℃)或当前误差较大(>2℃)，则完全重置
+          if (temp_diff > 3.0f || current_error > 2.0f) 
+          {
+            PID_Reset(&temp_pid);
+          }
+          // 否则只重置积分项，保留误差历史用于微分计算
+          else 
+          {
+            temp_pid.integral = 0.0f;  // 防止积分饱和
+            // 保留 prev_error 用于微分计算的连续性
+          }
+          
+          // 发送模式切换消息
+          setpoint_int = (int)temp_pid.setpoint;
+          setpoint_frac = (int)((temp_pid.setpoint - setpoint_int) * 10);
+          
+          snprintf(message_buffer, sizeof(message_buffer), 
+                   "Mode switched to %d\r\nNew set temperature: %d.%d℃\r\n\r\n", 
+                   system_mode, setpoint_int, setpoint_frac);
+          
+          HAL_UART_Transmit(&huart1, (uint8_t*)message_buffer, 
+                            strlen(message_buffer), HAL_MAX_DELAY);
+        }
+      }
+    }
+    else
+    {
+      key_pressed = 0;
+      key_count = 0;
+    }
+    
+    // 扫描周期 10ms
+    osDelay(10);
+  }
+  /* USER CODE END KeyScanTask */
+}
+/* USER CODE END Application */
+
+
+
+
+
+
+
+
 
 
 
@@ -419,37 +581,5 @@ void Relay_UpdateOutput(float pid_output)
   }
 }
 
-/**
- * @brief 串口发送温度任务
- * @param argument: 任务参数 (未使用)
- * @retval None
- */
-void UartSendTemperatureTask(void const * argument)
-{
-  /* USER CODE BEGIN UartSendTemperatureTask */
-  char temperature_buffer[32];  // 温度字符串缓冲区
-  int temp_int, temp_frac;      // 温度整数部分和小数部分
-  
-  /* Infinite loop */
-  for(;;)
-  {
-    // 将温度值分解为整数部分和小数部分
-    temp_int = (int)g_temperature;
-    temp_frac = (int)((g_temperature - temp_int) * 10);
-    
-    // 格式化温度字符串 "Temperature: xx.x℃"
-    snprintf(temperature_buffer, sizeof(temperature_buffer), 
-             "Temperature: %d.%d℃\r\n", temp_int, temp_frac);
-    
-    // 通过串口发送温度数据
-    HAL_UART_Transmit(&huart1, (uint8_t*)temperature_buffer, 
-                      strlen(temperature_buffer), HAL_MAX_DELAY);
-    
-    // 等待2秒
-    osDelay(2000);
-  }
-  /* USER CODE END UartSendTemperatureTask */
-}
 
-/* USER CODE END Application */
 
