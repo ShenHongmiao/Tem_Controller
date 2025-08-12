@@ -27,6 +27,9 @@
 /* USER CODE BEGIN Includes */
 #include "TemCal.h"
 #include "gpio.h"
+#include "usart.h"
+#include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -81,6 +84,7 @@ typedef struct {
 extern float g_temperature;
 extern uint8_t g_control_flag;
 extern float g_ADC_value;
+extern UART_HandleTypeDef huart1;
 
 // PID控制器实例
 PID_Controller temp_pid = {
@@ -102,11 +106,13 @@ static uint8_t pwm_output_state = 0;   // PWM输出状态
 osThreadId defaultTaskHandle;
 osThreadId tempTaskHandle;
 osThreadId controlTaskHandle;
+osThreadId uartTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 void TemperatureTask(void const * argument);
 void ControlTask(void const * argument);
+void UartSendTemperatureTask(void const * argument);
 float PID_Calculate(PID_Controller* pid, float current_value);
 void PID_Reset(PID_Controller* pid);
 void PWM_UpdateOutput(float duty_cycle);
@@ -171,6 +177,10 @@ void MX_FREERTOS_Init(void) {
   /* 创建控制任务 - 高优先级 */
   osThreadDef(controlTask, ControlTask, osPriorityHigh, 0, 256);
   controlTaskHandle = osThreadCreate(osThread(controlTask), NULL);
+  
+  /* 创建串口发送温度任务 - 低优先级 */
+  osThreadDef(uartTask, UartSendTemperatureTask, osPriorityLow, 0, 256);
+  uartTaskHandle = osThreadCreate(osThread(uartTask), NULL);
   /* USER CODE END RTOS_THREADS */
 
 }
@@ -407,6 +417,38 @@ void Relay_UpdateOutput(float pid_output)
     g_control_flag = 0;
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET); // 关闭加热
   }
+}
+
+/**
+ * @brief 串口发送温度任务
+ * @param argument: 任务参数 (未使用)
+ * @retval None
+ */
+void UartSendTemperatureTask(void const * argument)
+{
+  /* USER CODE BEGIN UartSendTemperatureTask */
+  char temperature_buffer[32];  // 温度字符串缓冲区
+  int temp_int, temp_frac;      // 温度整数部分和小数部分
+  
+  /* Infinite loop */
+  for(;;)
+  {
+    // 将温度值分解为整数部分和小数部分
+    temp_int = (int)g_temperature;
+    temp_frac = (int)((g_temperature - temp_int) * 10);
+    
+    // 格式化温度字符串 "Temperature: xx.x℃"
+    snprintf(temperature_buffer, sizeof(temperature_buffer), 
+             "Temperature: %d.%d℃\r\n", temp_int, temp_frac);
+    
+    // 通过串口发送温度数据
+    HAL_UART_Transmit(&huart1, (uint8_t*)temperature_buffer, 
+                      strlen(temperature_buffer), HAL_MAX_DELAY);
+    
+    // 等待2秒
+    osDelay(2000);
+  }
+  /* USER CODE END UartSendTemperatureTask */
 }
 
 /* USER CODE END Application */
