@@ -80,6 +80,7 @@ typedef struct {
 /* USER CODE BEGIN Variables */
 extern float g_temperature;
 extern uint8_t g_control_flag;
+extern float g_ADC_value;
 
 // PID控制器实例
 PID_Controller temp_pid = {
@@ -212,7 +213,7 @@ void TemperatureTask(void const * argument)
   {
     // 读取ADC值
     adc_value = Read_ADC1_Value();
-    
+    g_ADC_value = adc_value;
     if (adc_value > 0)
     {
       // 计算温度并更新全局变量

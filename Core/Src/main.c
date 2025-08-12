@@ -47,6 +47,7 @@
 /* USER CODE BEGIN PV */
 float g_temperature = 0.0f; // 用于保存计算的温度
 uint8_t g_control_flag = 0; // 控制标志位，PB0输出状态，上电为0
+float g_ADC_value = 0.0f; // 用于保存ADC读取的原始值
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
