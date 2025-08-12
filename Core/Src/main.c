@@ -21,7 +21,6 @@
 #include "cmsis_os.h"
 #include "adc.h"
 #include "gpio.h"
-#include "TemCal.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -46,7 +45,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+float g_temperature = 0.0f; // 用于保存计算的温度
+uint8_t g_control_flag = 0; // 控制标志位，PB0输出状态，上电为0
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/

@@ -18,4 +18,17 @@
  */
 float NTC_CalculateTemperature(uint16_t adc_value);
 
+/**
+ * @brief 读取ADC1的值（阻塞方式）
+ * @return uint16_t 返回ADC采集到的原始值
+ */
+uint16_t Read_ADC1_Value(void);
+
+/**
+ * @brief 将ADC值转换为电压
+ * @param adc_value ADC采集到的原始值 (0-4095)
+ * @return float 返回电压值（单位：V）
+ */
+float ADC_ValueToVoltage(uint16_t adc_value);
+
 #endif /* __NTC_H */
