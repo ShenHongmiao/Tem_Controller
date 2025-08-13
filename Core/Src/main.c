@@ -22,6 +22,7 @@
 #include "adc.h"
 #include "gpio.h"
 #include "usart.h"
+#include <string.h>  // filepath: e:\program_C\Tem_Controller\Core\Src\main.c
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
