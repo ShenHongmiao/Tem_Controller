@@ -5,7 +5,7 @@
 
 // 热敏电阻和分压电路参数
 #define NTC_R25         10000.0       // 25摄氏度时的标称电阻值 (10kΩ)
-#define NTC_BETA        3977.0        // B参数 (3977K)
+#define NTC_BETA        3380.0        // B参数 (3380K)
 #define NTC_T25         298.15        // 25摄氏度的开尔文温度
 #define PULL_UP_RES     10000.0       // 串联电阻的阻值 (10kΩ)
 #define ADC_VREF_VOLT   3.3           // ADC参考电压 (3.3V)
