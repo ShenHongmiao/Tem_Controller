@@ -15,8 +15,8 @@
 
 ### 硬件平台
 - **MCU**: STM32F103xB (Cortex-M3, 64KB Flash, 20KB RAM)
-- **RTOS**: FreeRTOS v10.3.1
-- **温度传感器**: NTC热敏电阻 (10KΩ@25℃, B=3380K)
+- **RTOS**: FreeRTOS v10.3.1（CMSIS V1封装）
+- **温度传感器**: NTC热敏电阻 (10KΩ@25℃, B=3380K)（SDNT1608X103F3380FTF 立创商城编号C316397）
 - **控制输出**: 推挽输出控制加热器
 
 ### 任务架构
@@ -89,7 +89,7 @@
 
 ## 温度检测系统
 
-### NTC热敏电阻参数
+### NTC热敏电阻参数(TemCal.h)
 ```c
 #define NTC_R25         10000.0     // 25℃标称电阻值 (10kΩ)
 #define NTC_BETA        3977.0      // B参数 (3977K)
@@ -115,7 +115,7 @@
 
 ## PID温度控制系统
 
-### PID参数配置
+### PID参数配置（freertos.c）
 ```c
 #define TEMP_SET_POINT  60.0f       // 温度设定点 (℃)
 #define PID_KP          2.0f        // 比例系数
@@ -245,7 +245,7 @@ cmake --build .
 
 ## 串口通信
 
-### USART1配置参数
+### USART1配置参数(usart.c)
 - **波特率**: 9600 bps
 - **数据位**: 8位
 - **停止位**: 1位
