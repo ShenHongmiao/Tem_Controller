@@ -48,7 +48,7 @@
 /* USER CODE BEGIN PV */
 float g_temperature = 0.0f; // 用于保存计算的温度
 uint8_t g_control_flag = 0; // 控制标志位，PB0输出状态，上电为0
-float g_ADC_value = 0.0f; // 用于保存ADC读取的原始值
+float g_ADC_output = 0.0f;   // 用于保存ADC输出值
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -101,6 +101,9 @@ int main(void)
   /* Call init function for freertos objects (in cmsis_os2.c) */
   MX_FREERTOS_Init();
 
+  
+  char* test_msg = "System starting...\r\n";
+  HAL_UART_Transmit(&huart1, (uint8_t*)test_msg, strlen(test_msg), 100);
   /* Start scheduler */
   osKernelStart();
 

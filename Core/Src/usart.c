@@ -7,7 +7,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2024 STMicroelectronics.
+  * Copyright (c) 2025 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -21,7 +21,9 @@
 #include "usart.h"
 
 /* USER CODE BEGIN 0 */
-
+#include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart1;
@@ -113,5 +115,31 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 }
 
 /* USER CODE BEGIN 1 */
+
+/**
+ * @brief 通过UART发送字符串
+ * @param str: 要发送的字符串
+ * @retval None
+ */
+void UART_SendString(const char* str)
+{
+    HAL_UART_Transmit(&huart1, (uint8_t*)str, strlen(str), HAL_MAX_DELAY);
+}
+
+/**
+ * @brief 通过UART发送格式化字符串
+ * @param format: 格式化字符串
+ * @param ...: 可变参数
+ * @retval None
+ */
+void UART_Printf(const char* format, ...)
+{
+    char buffer[256];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    UART_SendString(buffer);
+}
 
 /* USER CODE END 1 */

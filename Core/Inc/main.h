@@ -31,7 +31,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdarg.h>
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -59,9 +59,6 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define Control_1_Pin GPIO_PIN_0
 #define Control_1_GPIO_Port GPIOB
-#define Key_Pin GPIO_PIN_4
-#define Key_GPIO_Port GPIOE
-/*PE3为KEY1 PE4为KEY0*/
 
 /* USER CODE BEGIN Private defines */
 
