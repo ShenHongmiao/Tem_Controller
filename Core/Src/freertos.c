@@ -52,8 +52,8 @@ typedef struct {
 #define CONTROL_MODE            CONTROL_MODE_RELAY  // 当前控制模式
 
 // PID温度控制相关宏定义
-#define TEMP_SET_POINT_1        25.0f   // 温度设定点1 (摄氏度)
-#define TEMP_SET_POINT_2        60.0f   // 温度设定点2 (摄氏度)
+#define TEMP_SET_POINT_1        80.0f   // 温度设定点1 (摄氏度)
+#define TEMP_SET_POINT_2        0.0f   // 温度设定点2 (摄氏度)
 #define CONTROL_CYCLE_MS        100     // 控制任务周期 (毫秒)
 #define ADC_CYCLE_MS            500     // ADC读取任务周期 (毫秒)
 #define UART_SEND_CYCLE_MS      2000    // 串口发送温度周期 (毫秒)
@@ -72,6 +72,12 @@ typedef struct {
 #define PWM_MIN_DUTY            0       // 最小占空比 (%)
 #define PWM_MAX_DUTY            100     // 最大占空比 (%)
 #define RELAY_THRESHOLD         50.0f   // 继电器开关阈值 (%)
+
+// 加热测试模式配置
+#define HEATING_TEST_MODE       0       // 加热测试模式 (0=关闭, 1=开启)
+#define TEST_PWM_DUTY_CYCLE     50.0f   // 测试模式PWM占空比 (%)
+#define TEST_RELAY_STATE        1      // 测试模式继电器状态 (0=关闭, 1=开启)
+#define STARTUP_DELAY_MS        2000    // 上电后延时时间 (ms)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -261,17 +267,52 @@ void ControlTask(void const * argument)
   // 初始化PID控制器
   PID_Reset(&temp_pid);
   
-  // 初始化PWM控制
+  // 初始化PWM控制和安全启动
   if (CONTROL_MODE == CONTROL_MODE_PWM)
   {
     pwm_period_start = osKernelSysTick();
     current_duty_cycle = 0.0f;
     pwm_output_state = 0;
+    
+    // 上电安全保护：PWM初始化为0%并保持2秒
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+    g_control_flag = 0;
+    osDelay(STARTUP_DELAY_MS);
+  }
+  else
+  {
+    // 继电器模式：上电默认关闭
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+    g_control_flag = 0;
+    osDelay(STARTUP_DELAY_MS);
   }
   
   /* 无限循环 */
   for(;;)
   {
+    #if HEATING_TEST_MODE == 1
+    // 加热测试模式：固定输出，忽略PID控制
+    if (CONTROL_MODE == CONTROL_MODE_PWM)
+    {
+      // PWM测试模式：固定占空比
+      PWM_UpdateOutput(TEST_PWM_DUTY_CYCLE);
+    }
+    else
+    {
+      // 继电器测试模式：固定开/关
+      if (TEST_RELAY_STATE == 1)
+      {
+        g_control_flag = 1;
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+      }
+      else
+      {
+        g_control_flag = 0;
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+      }
+    }
+    #else
+    // 正常PID控制模式
     // 检查PID模式是否发生变化
     if (PID_Mode_Flag != last_mode)
     {
@@ -307,6 +348,7 @@ void ControlTask(void const * argument)
       // 继电器控制模式
       Relay_UpdateOutput(pid_output);
     }
+    #endif
     
     // 控制任务延时
     osDelay(CONTROL_CYCLE_MS);
@@ -325,16 +367,44 @@ void UartSendTask(void const * argument)
   
   /* 发送启动信息 */
   UART_SendString("Temperature Control System Started\r\n");
+  
+  #if HEATING_TEST_MODE == 1
+  UART_SendString("*** HEATING TEST MODE ENABLED ***\r\n");
+  if (CONTROL_MODE == CONTROL_MODE_PWM)
+  {
+    UART_Printf("PWM Test Mode: Fixed %.1f%% duty cycle\r\n", TEST_PWM_DUTY_CYCLE);
+  }
+  else
+  {
+    UART_Printf("Relay Test Mode: Fixed %s\r\n", TEST_RELAY_STATE ? "ON" : "OFF");
+  }
+  #else
   UART_SendString("PA3 button: Switch PID target temperature\r\n");
   UART_Printf("Mode 1 Target: %.1f C, Mode 2 Target: %.1f C\r\n", TEMP_SET_POINT_1, TEMP_SET_POINT_2);
+  #endif
+  
   UART_SendString("==================================\r\n");
   
   /* 无限循环 */
   for(;;)
   {
-    // 发送当前温度和PID信息到上位机
+    #if HEATING_TEST_MODE == 1
+    // 测试模式：显示温度和固定输出状态
+    if (CONTROL_MODE == CONTROL_MODE_PWM)
+    {
+      UART_Printf("TEST - Temp: %.1f C, PWM: %.1f%%, Output: %s\r\n", 
+                  g_temperature, current_duty_cycle, g_control_flag ? "ON" : "OFF");
+    }
+    else
+    {
+      UART_Printf("TEST - Temp: %.1f C, Relay: %s\r\n", 
+                  g_temperature, g_control_flag ? "ON" : "OFF");
+    }
+    #else
+    // 正常模式：显示温度和PID信息
     UART_Printf("Temp: %.1f C, Target: %.1f C, Mode: %d\r\n", 
                 g_temperature, temp_pid.setpoint, PID_Mode_Flag + 1);
+    #endif
     
     // 任务延时
     osDelay(UART_SEND_CYCLE_MS);
