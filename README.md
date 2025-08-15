@@ -385,6 +385,42 @@ Temp: 25.1 C, Target: 60.0 C, Mode: 2
 Temp: 25.6 C, Target: 60.0 C, Mode: 2
 ```
 
+为了匹配代码中基于宏的不同输出，下面给出三种运行时的示例输出，便于调试对照：
+
+**示例输出（正常模式）：**
+```
+Temperature Control System Started
+PA3 button: Switch PID target temperature
+Mode 1 Target: 25.0 C, Mode 2 Target: 60.0 C
+==================================
+Temp: 24.3 C, Target: 25.0 C, Mode: 1
+Temp: 24.8 C, Target: 25.0 C, Mode: 1
+Mode switched to 2, Target: 60.0 C
+Temp: 25.1 C, Target: 60.0 C, Mode: 2
+```
+
+**示例输出（加热测试模式 - PWM 固定占空比）：**
+```
+Temperature Control System Started
+*** HEATING TEST MODE ENABLED ***
+PWM Test Mode: Fixed 50.0% duty cycle
+==================================
+TEST - Temp: 24.3 C, PWM: 50.0%, Output: ON
+TEST - Temp: 24.8 C, PWM: 50.0%, Output: OFF
+TEST - Temp: 25.2 C, PWM: 50.0%, Output: ON
+```
+
+**示例输出（加热测试模式 - 继电器固定状态）：**
+```
+Temperature Control System Started
+*** HEATING TEST MODE ENABLED ***
+Relay Test Mode: Fixed ON
+==================================
+TEST - Temp: 24.3 C, Relay: ON
+TEST - Temp: 24.8 C, Relay: ON
+TEST - Temp: 25.2 C, Relay: ON
+```
+
 ### 串口任务特性
 - **任务优先级**: 低优先级 (osPriorityLow)
 - **发送周期**: 2000ms (2秒)
