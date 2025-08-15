@@ -58,7 +58,7 @@
 extern TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN EV */
-
+extern volatile uint8_t PID_Mode_Flag;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -173,6 +173,34 @@ void TIM1_UP_IRQHandler(void)
   /* USER CODE END TIM1_UP_IRQn 1 */
 }
 
+/**
+  * @brief This function handles EXTI line3 interrupt.
+  */
+void EXTI3_IRQHandler(void)
+{
+  /* USER CODE BEGIN EXTI3_IRQn 0 */
+
+  /* USER CODE END EXTI3_IRQn 0 */
+  HAL_GPIO_EXTI_IRQHandler(MODE_SWITCH_Pin);
+  /* USER CODE BEGIN EXTI3_IRQn 1 */
+
+  /* USER CODE END EXTI3_IRQn 1 */
+}
+
 /* USER CODE BEGIN 1 */
+
+/**
+ * @brief EXTI line detection callback
+ * @param GPIO_Pin: Specifies the pins connected EXTI line
+ * @retval None
+ */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == MODE_SWITCH_Pin)
+  {
+    // 切换PID模式标志位
+    PID_Mode_Flag = !PID_Mode_Flag;
+  }
+}
 
 /* USER CODE END 1 */

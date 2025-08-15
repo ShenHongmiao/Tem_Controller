@@ -52,7 +52,8 @@ typedef struct {
 #define CONTROL_MODE            CONTROL_MODE_RELAY  // 当前控制模式
 
 // PID温度控制相关宏定义
-#define TEMP_SET_POINT          60.0f   // 温度设定点 (摄氏度)
+#define TEMP_SET_POINT_1        25.0f   // 温度设定点1 (摄氏度)
+#define TEMP_SET_POINT_2        60.0f   // 温度设定点2 (摄氏度)
 #define CONTROL_CYCLE_MS        100     // 控制任务周期 (毫秒)
 #define ADC_CYCLE_MS            500     // ADC读取任务周期 (毫秒)
 #define UART_SEND_CYCLE_MS      2000    // 串口发送温度周期 (毫秒)
@@ -84,9 +85,12 @@ extern float g_temperature;
 extern uint8_t g_control_flag;
 extern float g_ADC_output;
 
+// PID模式切换标志位
+volatile uint8_t PID_Mode_Flag = 0;  // 0: 模式1(TEMP_SET_POINT_1), 1: 模式2(TEMP_SET_POINT_2)
+
 // PID控制器实例
 PID_Controller temp_pid = {
-    .setpoint = TEMP_SET_POINT,
+    .setpoint = TEMP_SET_POINT_1,
     .kp = PID_KP,
     .ki = PID_KI, 
     .kd = PID_KD,
@@ -249,6 +253,7 @@ void TemperatureTask(void const * argument)
 void ControlTask(void const * argument)
 {
   float pid_output = 0.0f;
+  static uint8_t last_mode = 0xFF;  // 初始化为无效值，强制第一次更新
   
   /* 任务初始化 */
   osDelay(1500); // 等待温度读取任务启动
@@ -267,6 +272,27 @@ void ControlTask(void const * argument)
   /* 无限循环 */
   for(;;)
   {
+    // 检查PID模式是否发生变化
+    if (PID_Mode_Flag != last_mode)
+    {
+      // 更新PID设定点
+      if (PID_Mode_Flag == 0)
+      {
+        temp_pid.setpoint = TEMP_SET_POINT_1;
+        UART_Printf("Mode switched to 1, Target: %.1f C\r\n", TEMP_SET_POINT_1);
+      }
+      else
+      {
+        temp_pid.setpoint = TEMP_SET_POINT_2;
+        UART_Printf("Mode switched to 2, Target: %.1f C\r\n", TEMP_SET_POINT_2);
+      }
+      
+      // 重置PID控制器状态
+      PID_Reset(&temp_pid);
+      
+      last_mode = PID_Mode_Flag;
+    }
+    
     // 计算PID输出
     pid_output = PID_Calculate(&temp_pid, g_temperature);
     
@@ -299,14 +325,16 @@ void UartSendTask(void const * argument)
   
   /* 发送启动信息 */
   UART_SendString("Temperature Control System Started\r\n");
-  UART_SendString("Format: Temperature: XX.X C\r\n");
+  UART_SendString("PA3 button: Switch PID target temperature\r\n");
+  UART_Printf("Mode 1 Target: %.1f C, Mode 2 Target: %.1f C\r\n", TEMP_SET_POINT_1, TEMP_SET_POINT_2);
   UART_SendString("==================================\r\n");
   
   /* 无限循环 */
   for(;;)
   {
-    // 发送当前温度到上位机
-    UART_Printf("Temperature: %.1f C\r\n", g_temperature);
+    // 发送当前温度和PID信息到上位机
+    UART_Printf("Temp: %.1f C, Target: %.1f C, Mode: %d\r\n", 
+                g_temperature, temp_pid.setpoint, PID_Mode_Flag + 1);
     
     // 任务延时
     osDelay(UART_SEND_CYCLE_MS);

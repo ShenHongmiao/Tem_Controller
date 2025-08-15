@@ -6,9 +6,9 @@
 本系统采用STM32F103微控制器和FreeRTOS实时操作系统，实现高精度的温度检测与PID控制。系统支持NTC热敏电阻温度检测、PID算法控制加热器输出，并提供串口通信功能向上位机实时发送温度数据。
 
 ## 版本信息
-- **当前版本**: v1.4
-- **更新内容**: 实现多任务架构、PID控制算法、串口通信功能
-- **系统状态**: 稳定运行，支持实时温度监控和控制
+- **当前版本**: v1.5
+- **更新内容**: 增加PA3按键中断切换PID设定温度功能
+- **系统状态**: 稳定运行，支持双温度设定点切换控制
 
 
 ## 系统架构
@@ -47,6 +47,7 @@
 | 引脚 | 功能描述 | 配置模式 | 说明 |
 |------|---------|----------|------|
 | PA0  | ADC1_IN0 | 模拟输入 (Analog Mode) | NTC热敏电阻信号采集 |
+| PA3  | MODE_SWITCH | EXTI上升沿触发中断 (Pull-down) | PID模式切换按键 |
 | PB0  | Control_1 | 推挽输出 (Push-Pull Output) | 加热器控制信号 (1=加热, 0=停止) |
 | PA9  | USART1_TX | 复用推挽输出 (Alternate Function Push-Pull) | 串口发送引脚 |
 | PA10 | USART1_RX | 浮空输入 (Floating Input) | 串口接收引脚 |
@@ -113,11 +114,46 @@
 - R25: 25℃时的标称电阻值
 - Beta: B参数
 
+## PID模式切换功能
+
+### 硬件配置
+- **切换引脚**: PA3 (MODE_SWITCH_Pin)
+- **中断类型**: EXTI3 上升沿触发
+- **内部下拉**: 启用下拉电阻
+- **STM32F103C8T6封装**: 48脚，PA3对应第13脚
+
+### 双温度设定点（可通过宏定义修改）
+```c
+#define TEMP_SET_POINT_1        25.0f   // 温度设定点1 (摄氏度)
+#define TEMP_SET_POINT_2        60.0f   // 温度设定点2 (摄氏度)
+```
+
+### 功能特性
+- **模式切换**: PA3上升沿触发时自动在两个温度设定点间切换
+- **PID重置**: 模式切换时自动重置PID控制器状态，避免积分饱和
+- **串口提示**: 切换时通过串口发送确认信息
+- **全局标志**: 使用`PID_Mode_Flag`变量标识当前模式 (0=模式1, 1=模式2)
+
+### 硬件连接方式
+**⚠️ 重要安全提醒**：
+- **推荐方式**: 使用3.3V信号源
+- **5V连接**: 如需使用5V信号，必须添加电阻分压保护
+  ```
+  5V ──[10kΩ]── PA3 ──[10kΩ]── GND
+  ```
+- **原因**: STM32F103 GPIO输入电压不能超过VDD+0.3V，直接5V输入会损坏芯片
+
+### 中断处理
+- **中断优先级**: 5 (较低优先级，不影响实时控制)
+- **防抖处理**: 硬件中断处理，软件层面模式切换
+- **线程安全**: 使用volatile修饰的全局变量
+
 ## PID温度控制系统
 
 ### PID参数配置（freertos.c）
 ```c
-#define TEMP_SET_POINT  60.0f       // 温度设定点 (℃)
+#define TEMP_SET_POINT_1        25.0f   // 温度设定点1 (℃)
+#define TEMP_SET_POINT_2        60.0f   // 温度设定点2 (℃)
 #define PID_KP          2.0f        // 比例系数
 #define PID_KI          0.01f       // 积分系数
 #define PID_KD          0.0f        // 微分系数
@@ -202,6 +238,8 @@ cmake --build .
 ### 全局变量监控
 - `g_temperature`: 实时温度值 (℃)
 - `g_control_flag`: 加热器状态 (0/1)
+- `PID_Mode_Flag`: PID模式标志 (0=模式1, 1=模式2)
+- `temp_pid.setpoint`: 当前PID设定点 (℃)
 - `temp_pid.output`: PID输出值 (%)
 - `temp_pid.integral`: 积分累积值
 
@@ -216,18 +254,24 @@ cmake --build .
    - 将NTC热敏电阻连接到PA0
    - 将加热器控制端连接到PB0
    - 连接串口到PA9(TX)/PA10(RX)
+   - 连接模式切换信号到PA3 (⚠️注意电压保护)
    - 确保电源和地线正确连接
 
 2. **参数调整**:
-   - 修改 `TEMP_SET_POINT` 设置目标温度
+   - 修改 `TEMP_SET_POINT_1` 和 `TEMP_SET_POINT_2` 设置两个目标温度
    - 调整PID参数优化控制效果
    - 根据实际硬件调整NTC参数
 
 3. **系统启动**:
-   - 上电后系统自动初始化
+   - 上电后系统自动初始化，默认为模式1
    - 1秒后开始温度采集
    - 1.5秒后开始PID控制
    - 2秒后开始串口通信
+
+4. **模式切换**:
+   - PA3引脚接收上升沿信号即可切换PID模式
+   - 切换时PID控制器自动重置避免积分饱和
+   - 通过串口可监控当前模式和目标温度
 
 ## 故障排除
 
@@ -236,11 +280,19 @@ cmake --build .
 2. **控制不稳定**: 调整PID参数，特别是Kp和Kd
 3. **系统无响应**: 检查FreeRTOS配置和堆栈大小
 4. **串口无输出**: 检查波特率设置和接线
+5. **按键无响应**: 检查PA3接线和电压电平，确认中断配置
+6. **芯片损坏**: 检查PA3是否误接5V而无电压保护
 
 ### 参数调优建议
 - **Kp过大**: 系统振荡，减小Kp值
 - **Ki过大**: 系统不稳定，减小Ki值  
 - **Kd过大**: 对噪声敏感，减小Kd值
+
+### PA3接线安全指南
+- **3.3V信号**: 直接连接，最安全
+- **5V信号**: 必须添加电阻分压 (10kΩ-10kΩ)
+- **机械按键**: 一端接3.3V，另一端接PA3，利用内部下拉
+- **数字信号**: 确保高电平不超过3.6V
 
 
 ## 串口通信
@@ -259,25 +311,34 @@ cmake --build .
 系统启动时自动发送一次启动信息：
 ```
 Temperature Control System Started
-Format: Temperature: XX.X C
+PA3 button: Switch PID target temperature
+Mode 1 Target: 25.0 C, Mode 2 Target: 60.0 C
 ==================================
 ```
 
 #### 2. 定时温度数据
-系统通过串口每2秒自动发送一次当前温度数据：
+系统通过串口每2秒自动发送一次当前温度、目标温度和模式信息：
 ```
-Temperature: xx.x C
+Temp: xx.x C, Target: xx.x C, Mode: x
+```
+
+#### 3. 模式切换消息
+PA3按键触发时发送模式切换确认：
+```
+Mode switched to x, Target: xx.x C
 ```
 
 **示例完整输出：**
 ```
 Temperature Control System Started
-Format: Temperature: XX.X C
+PA3 button: Switch PID target temperature  
+Mode 1 Target: 25.0 C, Mode 2 Target: 60.0 C
 ==================================
-Temperature: 24.3 C
-Temperature: 24.8 C
-Temperature: 25.1 C
-Temperature: 25.6 C
+Temp: 24.3 C, Target: 25.0 C, Mode: 1
+Temp: 24.8 C, Target: 25.0 C, Mode: 1
+Mode switched to 2, Target: 60.0 C
+Temp: 25.1 C, Target: 60.0 C, Mode: 2
+Temp: 25.6 C, Target: 60.0 C, Mode: 2
 ```
 
 ### 串口任务特性
@@ -299,6 +360,7 @@ Temperature: 25.6 C
 - **v1.2**: 实现PID温度控制算法
 - **v1.3**: 优化控制参数和系统稳定性
 - **v1.4**: 新增串口通信功能，支持实时向上位机发送温度数据，支持继电器和PWM两种控制模式
+- **v1.5**: 新增PA3按键中断切换PID设定温度功能，支持双温度设定点，模式切换时自动重置PID状态
 
 ## 技术特点
 
