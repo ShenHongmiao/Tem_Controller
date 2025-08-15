@@ -320,12 +320,12 @@ void ControlTask(void const * argument)
       if (PID_Mode_Flag == 0)
       {
         temp_pid.setpoint = TEMP_SET_POINT_1;
-        UART_Printf("Mode switched to 1, Target: %.1f C\r\n", TEMP_SET_POINT_1);
+        UART_PrintTemp("Mode switched to 1, Target: ", TEMP_SET_POINT_1);
       }
       else
       {
         temp_pid.setpoint = TEMP_SET_POINT_2;
-        UART_Printf("Mode switched to 2, Target: %.1f C\r\n", TEMP_SET_POINT_2);
+        UART_PrintTemp("Mode switched to 2, Target: ", TEMP_SET_POINT_2);
       }
       
       // 重置PID控制器状态
@@ -372,7 +372,7 @@ void UartSendTask(void const * argument)
   UART_SendString("*** HEATING TEST MODE ENABLED ***\r\n");
   if (CONTROL_MODE == CONTROL_MODE_PWM)
   {
-    UART_Printf("PWM Test Mode: Fixed %.1f%% duty cycle\r\n", TEST_PWM_DUTY_CYCLE);
+    UART_PrintPercent("PWM Test Mode: Fixed ", TEST_PWM_DUTY_CYCLE);
   }
   else
   {
@@ -380,7 +380,12 @@ void UartSendTask(void const * argument)
   }
   #else
   UART_SendString("PA3 button: Switch PID target temperature\r\n");
-  UART_Printf("Mode 1 Target: %.1f C, Mode 2 Target: %.1f C\r\n", TEMP_SET_POINT_1, TEMP_SET_POINT_2);
+  
+  // 分别显示两个目标温度
+  char temp1_str[12], temp2_str[12];
+  FloatToString(TEMP_SET_POINT_1, 1, temp1_str);
+  FloatToString(TEMP_SET_POINT_2, 1, temp2_str);
+  UART_Printf("Mode 1 Target: %s C, Mode 2 Target: %s C\r\n", temp1_str, temp2_str);
   #endif
   
   UART_SendString("==================================\r\n");
@@ -390,20 +395,27 @@ void UartSendTask(void const * argument)
   {
     #if HEATING_TEST_MODE == 1
     // 测试模式：显示温度和固定输出状态
+    char temp_str[12], duty_str[12];
+    FloatToString(g_temperature, 1, temp_str);
+    
     if (CONTROL_MODE == CONTROL_MODE_PWM)
     {
-      UART_Printf("TEST - Temp: %.1f C, PWM: %.1f%%, Output: %s\r\n", 
-                  g_temperature, current_duty_cycle, g_control_flag ? "ON" : "OFF");
+      FloatToString(current_duty_cycle, 1, duty_str);
+      UART_Printf("TEST - Temp: %s C, PWM: %s%%, Output: %s\r\n", 
+                  temp_str, duty_str, g_control_flag ? "ON" : "OFF");
     }
     else
     {
-      UART_Printf("TEST - Temp: %.1f C, Relay: %s\r\n", 
-                  g_temperature, g_control_flag ? "ON" : "OFF");
+      UART_Printf("TEST - Temp: %s C, Relay: %s\r\n", 
+                  temp_str, g_control_flag ? "ON" : "OFF");
     }
     #else
     // 正常模式：显示温度和PID信息
-    UART_Printf("Temp: %.1f C, Target: %.1f C, Mode: %d\r\n", 
-                g_temperature, temp_pid.setpoint, PID_Mode_Flag + 1);
+    char temp_str[12], target_str[12];
+    FloatToString(g_temperature, 1, temp_str);
+    FloatToString(temp_pid.setpoint, 1, target_str);
+    UART_Printf("Temp: %s C, Target: %s C, Mode: %d\r\n", 
+                temp_str, target_str, PID_Mode_Flag + 1);
     #endif
     
     // 任务延时

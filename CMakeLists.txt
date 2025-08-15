@@ -70,7 +70,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 )
 
 # Add linker options for printf float support
-target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
-    -Wl,-u,_printf_float
-    -Wl,-u,_scanf_float
-)
+#target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+#    -Wl,-u,_printf_float
+#    -Wl,-u,_scanf_float
+#)

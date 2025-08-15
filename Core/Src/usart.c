@@ -24,6 +24,77 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+
+/**
+ * @brief 将浮点数分解为整数和小数部分进行格式化
+ * @param value: 浮点数值
+ * @param decimals: 小数位数(支持1-3位)
+ * @param buffer: 输出缓冲区
+ * @retval None
+ */
+void FloatToString(float value, int decimals, char* buffer)
+{
+    int int_part, frac_part;
+    int multiplier = 1;
+    
+    // 计算小数部分的乘数
+    for (int i = 0; i < decimals; i++) {
+        multiplier *= 10;
+    }
+    
+    // 处理负数
+    if (value < 0) {
+        *buffer++ = '-';
+        value = -value;
+    }
+    
+    // 分离整数和小数部分
+    int_part = (int)value;
+    frac_part = (int)((value - int_part) * multiplier + 0.5f); // 四舍五入
+    
+    // 处理进位情况
+    if (frac_part >= multiplier) {
+        int_part++;
+        frac_part = 0;
+    }
+    
+    // 格式化输出
+    if (decimals == 1) {
+        sprintf(buffer, "%d.%01d", int_part, frac_part);
+    } else if (decimals == 2) {
+        sprintf(buffer, "%d.%02d", int_part, frac_part);
+    } else if (decimals == 3) {
+        sprintf(buffer, "%d.%03d", int_part, frac_part);
+    } else {
+        sprintf(buffer, "%d", int_part); // 默认只显示整数部分
+    }
+}
+
+/**
+ * @brief 简化的浮点数打印函数 - 带温度单位
+ * @param label: 标签字符串
+ * @param value: 温度值
+ * @retval None
+ */
+void UART_PrintTemp(const char* label, float value)
+{
+    char temp_str[12];
+    FloatToString(value, 1, temp_str);
+    UART_Printf("%s%s C\r\n", label, temp_str);
+}
+
+/**
+ * @brief 简化的浮点数打印函数 - 带百分号
+ * @param label: 标签字符串  
+ * @param value: 百分比值
+ * @retval None
+ */
+void UART_PrintPercent(const char* label, float value)
+{
+    char percent_str[12];
+    FloatToString(value, 1, percent_str);
+    UART_Printf("%s%s%%\r\n", label, percent_str);
+}
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart1;

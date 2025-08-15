@@ -43,6 +43,9 @@ void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN Prototypes */
 void UART_SendString(const char* str);
 void UART_Printf(const char* format, ...);
+void FloatToString(float value, int decimals, char* buffer);
+void UART_PrintTemp(const char* label, float value);
+void UART_PrintPercent(const char* label, float value);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus
